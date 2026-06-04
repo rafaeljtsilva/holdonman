@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Treino de Isometria Inteligente 🎯</title>
+    <style>
+        :root {
+            --primary: #4CAF50;
+            --danger: #f44336;
+            --dark: #212121;
+            --light: #F5F5F5;
+            --card: #FFFFFF;
+        }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--light);
+            color: var(--dark);
+            margin: 0;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            max-width: 450px;
+            width: 100%;
+            background: var(--card);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            box-sizing: border-box;
+        }
+        h1, h2, h3 { text-align: center; margin-top: 0; }
+        .semana-badge {
+            background: var(--primary);
+            color: white;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.95rem;
+            display: inline-block;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        .exercicio-lista { list-style: none; padding: 0; margin-bottom: 20px; }
+        .exercicio-item {
+            background: var(--light);
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .ex-info { display: flex; flex-direction: column; }
+        .ex-nome { font-weight: bold; font-size: 1.1rem; }
+        .ex-meta { color: #555; font-size: 0.95rem; margin-top: 4px; }
+        .btn-feito {
+            width: 100%;
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 15px;
+            font-size: 1.1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .btn-feito:disabled { background: #cccccc; }
+        
+        /* Secção de Gestão */
+        .admin-section {
+            margin-top: 30px;
+            border-top: 2px dashed #ddd;
+            padding-top: 20px;
+        }
+        .form-grupo {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 12px;
+        }
+        .form-grupo label { font-size: 0.9rem; font-weight: bold; margin-bottom: 4px; }
+        .form-grupo input, .form-grupo select {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+        .btn-add {
+            width: 100%;
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .btn-delete {
+            background: none;
+            border: none;
+            color: var(--danger);
+            font-size: 1.2rem;
+            cursor: pointer;
+            padding: 5px 10px;
+        }
+
+        /* Histórico Visual */
+        .progresso-container { margin-top: 25px; border-top: 2px solid var(--light); padding-top: 20px; }
+        .grid-dias {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .dia-quadrado {
+            aspect-ratio: 1;
+            background: #e0e0e0;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            color: #666;
+        }
+        .dia-quadrado.treinado { background: var(--primary); color: white; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Os Meus Holds ⏱️</h1>
+    <div style="text-align: center;"><span class="semana-badge" id="semana-atual">Semana 1</span></div>
+    
+    <h2>Hoje:</h2>
+    <ul class="exercicio-lista" id="lista-exercicios"></ul>
+
+    <button class="btn-feito" id="btn-concluir" onclick="marcarComoFeito()">Marcar como Feito ✅</button>
+
+    <div class="progresso-container">
+        <h3>Histórico (Últimos 28 dias)</h3>
+        <p>Total de treinos concluídos: <span id="total-treinos">0</span></p>
+        <div class="grid-dias" id="grid-progresso"></div>
+    </div>
+
+    <div class="admin-section">
+        <h3>⚙️ Gerir Exercícios</h3>
+        <div class="form-grupo">
+            <label>Nome do Exercício</label>
+            <input type="text" id="novo-nome" placeholder="Ex: Hollow Body Hold">
+        </div>
+        <div class="form-grupo">
+            <label>Tipo de Meta</label>
+            <select id="novo-tipo">
+                <option value="seg">Tempo (Segundos)</option>
+                <option value="rep">Repetições</option>
+            </select>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="form-grupo">
+                <label>Valor Inicial</label>
+                <input type="number" id="novo-base" value="30">
+            </div>
+            <div class="form-grupo">
+                <label>Aumento Semanal</label>
+                <input type="number" id="novo-inc" value="5">
+            </div>
+        </div>
+        <div class="form-grupo">
+            <label>Máximo por Série (Limite)</label>
+            <input type="number" id="novo-limite" value="60" placeholder="Ex: 60">
+            <small style="color:#777; margin-top:2px;">Se o plano passar este valor, a app divide o total em séries iguais (ex: 70s com limite 60s vira 2 séries de 35s).</small>
+        </div>
+        <button class="btn-add" onclick="adicionarExercicio()">Adicionar Exercício +</button>
+    </div>
+</div>
+
+<script>
+    const exerciciosPadrao = [
+        { id: 1, nome: "Wall sit hold", base: 30, inc: 5, tipo: "seg", limite: 60 },
+        { id: 2, nome: "Plank hold", base: 30, inc: 5, tipo: "seg", limite: 60 },
+        { id: 3, nome: "Superman hold", base: 30, inc: 5, tipo: "seg", limite: 60 },
+        { id: 4, nome: "Arm pushup hold", base: 30, inc: 5, tipo: "seg", limite: 60 }
+    ];
+
+    let appDados = JSON.parse(localStorage.getItem('appTreino_v3'));
+    
+    if (!appDados) {
+        appDados = {
+            dataInicio: new Date().toISOString().split('T')[0],
+            exercicios: exerciciosPadrao,
+            historicoDias: []
+        };
+        localStorage.setItem('appTreino_v3', JSON.stringify(appDados));
+    }
+
+    function guardarDados() {
+        localStorage.setItem('appTreino_v3', JSON.stringify(appDados));
+    }
+
+    function obterSemanaAtual() {
+        const inicio = new Date(appDados.dataInicio);
+        const hoje = new Date();
+        const difTempo = hoje - inicio;
+        const difDias = Math.floor(difTempo / (1000 * 60 * 60 * 24));
+        return Math.floor(difDias / 7) + 1;
+    }
+
+    function calcularMeta(ex, semana) {
+        let total = ex.base + (ex.inc * (semana - 1));
+        const sufixo = ex.tipo === "seg" ? "segundos" : "reps";
+
+        // Nova lógica de divisão simétrica/igualitária
+        if (ex.limite > 0 && total > ex.limite) {
+            let numSeries = Math.ceil(total / ex.limite);
+            let repsPorSerie = Math.ceil(total / numSeries);
+            
+            return `${numSeries} séries de ${repsPorSerie} ${sufixo}`;
+        }
+        
+        return `${total} ${sufixo}`;
+    }
+
+    function atualizarInterface() {
+        const semana = obterSemanaAtual();
+        document.getElementById('semana-atual').innerText = `Semana ${semana}`;
+        
+        const lista = document.getElementById('lista-exercicios');
+        lista.innerHTML = '';
+        
+        appDados.exercicios.forEach(ex => {
+            const metaTexto = calcularMeta(ex, semana);
+            
+            const li = document.createElement('li');
+            li.className = 'exercicio-item';
+            li.innerHTML = `
+                <div class="ex-info">
+                    <span class="ex-nome">${ex.nome}</span>
+                    <span class="ex-meta">Meta: ${metaTexto} <small style="color:#999;">(Base: ${ex.base}s +${ex.inc}s/sem)</small></span>
+                </div>
+                <button class="btn-delete" onclick="eliminarExercicio(${ex.id})">🗑️</button>
+            `;
+            lista.appendChild(li);
+        });
+
+        const hojeStr = new Date().toISOString().split('T')[0];
+        const jaTreinouHoje = appDados.historicoDias.includes(hojeStr);
+        const btn = document.getElementById('btn-concluir');
+        if (jaTreinouHoje) {
+            btn.innerText = "Treino de Hoje Concluído! 🔥";
+            btn.disabled = true;
+            btn.style.background = "#cccccc";
+        } else {
+            btn.innerText = "Marcar como Feito ✅";
+            btn.disabled = false;
+            btn.style.background = "var(--primary)";
+        }
+
+        document.getElementById('total-treinos').innerText = appDados.historicoDias.length;
+        const grid = document.getElementById('grid-progresso');
+        grid.innerHTML = '';
+        
+        for (let i = 27; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            const dStr = d.toISOString().split('T')[0];
+            
+            const div = document.createElement('div');
+            div.className = 'dia-quadrado';
+            div.innerText = d.getDate();
+            
+            if (appDados.historicoDias.includes(dStr)) {
+                div.classList.add('treinado');
+            }
+            grid.appendChild(div);
+        }
+    }
+
+    function marcarComoFeito() {
+        const hojeStr = new Date().toISOString().split('T')[0];
+        if (!appDados.historicoDias.includes(hojeStr)) {
+            appDados.historicoDias.push(hojeStr);
+            guardarDados();
+            atualizarInterface();
+        }
+    }
+
+    function adicionarExercicio() {
+        const nome = document.getElementById('novo-nome').value.trim();
+        const tipo = document.getElementById('novo-tipo').value;
+        const base = parseInt(document.getElementById('novo-base').value) || 0;
+        const inc = parseInt(document.getElementById('novo-inc').value) || 0;
+        const limite = parseInt(document.getElementById('novo-limite').value) || 0;
+
+        if (!nome) {
+            alert('Por favor, dá um nome ao exercício!');
+            return;
+        }
+
+        const novoEx = { id: Date.now(), nome, base, inc, tipo, limite };
+        appDados.exercicios.push(novoEx);
+        guardarDados();
+        atualizarInterface();
+        document.getElementById('novo-nome').value = '';
+    }
+
+    function eliminarExercicio(id) {
+        if (confirm('Tens a certeza que queres apagar este exercício?')) {
+            appDados.exercicios = appDados.exercicios.filter(ex => ex.id !== id);
+            guardarDados();
+            atualizarInterface();
+        }
+    }
+
+    atualizarInterface();
+</script>
+
+</body>
+</html>
