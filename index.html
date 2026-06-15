@@ -11,6 +11,7 @@
             --dark: #212121;
             --light: #F5F5F5;
             --card: #FFFFFF;
+            --edit: #FF9800;
         }
         body {
             font-family: 'Segoe UI', system-ui, sans-serif;
@@ -52,9 +53,10 @@
             justify-content: space-between;
             align-items: center;
         }
-        .ex-info { display: flex; flex-direction: column; }
+        .ex-info { display: flex; flex-direction: column; max-width: 70%; }
         .ex-nome { font-weight: bold; font-size: 1.1rem; }
         .ex-meta { color: #555; font-size: 0.95rem; margin-top: 4px; }
+        .ex-botoes { display: flex; gap: 5px; }
         .btn-feito {
             width: 100%;
             background: var(--primary);
@@ -96,14 +98,15 @@
             font-weight: bold;
             cursor: pointer;
         }
-        .btn-delete {
+        .btn-action-icon {
             background: none;
             border: none;
-            color: var(--danger);
             font-size: 1.2rem;
             cursor: pointer;
-            padding: 5px 10px;
+            padding: 5px;
+            border-radius: 4px;
         }
+        .btn-action-icon:hover { background: #e0e0e0; }
 
         /* Histórico Visual */
         .progresso-container { margin-top: 25px; border-top: 2px solid var(--light); padding-top: 20px; }
@@ -144,7 +147,8 @@
     </div>
 
     <div class="admin-section">
-        <h3>⚙️ Gerir Exercícios</h3>
+        <h3 id="form-titulo">⚙️ Adicionar Exercício</h3>
+        <input type="hidden" id="edit-id" value="">
         <div class="form-grupo">
             <label>Nome do Exercício</label>
             <input type="text" id="novo-nome" placeholder="Ex: Hollow Body Hold">
@@ -169,9 +173,9 @@
         <div class="form-grupo">
             <label>Máximo por Série (Limite)</label>
             <input type="number" id="novo-limite" value="60" placeholder="Ex: 60">
-            <small style="color:#777; margin-top:2px;">Se o plano passar este valor, a app divide o total em séries iguais (ex: 70s com limite 60s vira 2 séries de 35s).</small>
+            <small style="color:#777; margin-top:2px;">Se passar este valor, divide em séries iguais.</small>
         </div>
-        <button class="btn-add" onclick="adicionarExercicio()">Adicionar Exercício +</button>
+        <button class="btn-add" id="btn-salvar" onclick="salvarExercicio()">Adicionar Exercício +</button>
     </div>
 </div>
 
@@ -183,7 +187,7 @@
         { id: 4, nome: "Arm pushup hold", base: 30, inc: 5, tipo: "seg", limite: 60 }
     ];
 
-    let appDados = JSON.parse(localStorage.getItem('appTreino_v3'));
+    let appDados = JSON.parse(localStorage.getItem('appTreino_v4'));
     
     if (!appDados) {
         appDados = {
@@ -191,33 +195,35 @@
             exercicios: exerciciosPadrao,
             historicoDias: []
         };
-        localStorage.setItem('appTreino_v3', JSON.stringify(appDados));
+        guardarDados();
     }
 
     function guardarDados() {
-        localStorage.setItem('appTreino_v3', JSON.stringify(appDados));
+        localStorage.setItem('appTreino_v4', JSON.stringify(appDados));
+    }
+
+    function obterSemanaData(dataStr) {
+        const inicio = new Date(appDados.dataInicio);
+        const dataAlvo = new Date(dataStr);
+        const difTempo = dataAlvo - inicio;
+        const difDias = Math.floor(difTempo / (1000 * 60 * 60 * 24));
+        return Math.floor(difDias / 7) + 1;
     }
 
     function obterSemanaAtual() {
-        const inicio = new Date(appDados.dataInicio);
-        const hoje = new Date();
-        const difTempo = hoje - inicio;
-        const difDias = Math.floor(difTempo / (1000 * 60 * 60 * 24));
-        return Math.floor(difDias / 7) + 1;
+        const hojeStr = new Date().toISOString().split('T')[0];
+        return obterSemanaData(hojeStr);
     }
 
     function calcularMeta(ex, semana) {
         let total = ex.base + (ex.inc * (semana - 1));
         const sufixo = ex.tipo === "seg" ? "segundos" : "reps";
 
-        // Nova lógica de divisão simétrica/igualitária
         if (ex.limite > 0 && total > ex.limite) {
             let numSeries = Math.ceil(total / ex.limite);
             let repsPorSerie = Math.ceil(total / numSeries);
-            
             return `${numSeries} séries de ${repsPorSerie} ${sufixo}`;
         }
-        
         return `${total} ${sufixo}`;
     }
 
@@ -236,9 +242,12 @@
             li.innerHTML = `
                 <div class="ex-info">
                     <span class="ex-nome">${ex.nome}</span>
-                    <span class="ex-meta">Meta: ${metaTexto} <small style="color:#999;">(Base: ${ex.base}s +${ex.inc}s/sem)</small></span>
+                    <span class="ex-meta">Meta: ${metaTexto} <small style="color:#999;">(Base: ${ex.base} +${ex.inc}/sem)</small></span>
                 </div>
-                <button class="btn-delete" onclick="eliminarExercicio(${ex.id})">🗑️</button>
+                <div class="ex-botoes">
+                    <button class="btn-action-icon" onclick="carregarParaEditar(${ex.id})">✏️</button>
+                    <button class="btn-action-icon" onclick="eliminarExercicio(${ex.id})">🗑️</button>
+                </div>
             `;
             lista.appendChild(li);
         });
@@ -281,11 +290,44 @@
         if (!appDados.historicoDias.includes(hojeStr)) {
             appDados.historicoDias.push(hojeStr);
             guardarDados();
+            
+            // Lógica de verificação do incremento para o dia seguinte
+            const amanha = new Date();
+            amanha.setDate(amanha.getDate() + 1);
+            const amanhaStr = amanha.toISOString().split('T')[0];
+            
+            const semanaHoje = obterSemanaAtual();
+            const semanaAmanha = obterSemanaData(amanhaStr);
+            
+            if (semanaAmanha > semanaHoje) {
+                alert(`🔥 Excelente treino! Atenção: o teu próximo dia de treino já será na Semana ${semanaAmanha}. Prepara-se para o incremento semanal! 💪`);
+            }
+            
             atualizarInterface();
         }
     }
 
-    function adicionarExercicio() {
+    function carregarParaEditar(id) {
+        const ex = appDados.exercicios.find(e => e.id === id);
+        if (!ex) return;
+
+        document.getElementById('edit-id').value = ex.id;
+        document.getElementById('novo-nome').value = ex.nome;
+        document.getElementById('novo-tipo').value = ex.tipo;
+        document.getElementById('novo-base').value = ex.base;
+        document.getElementById('novo-inc').value = ex.inc;
+        document.getElementById('novo-limite').value = ex.limite;
+
+        document.getElementById('form-titulo').innerText = "✏️ Editar Exercício";
+        document.getElementById('btn-salvar').innerText = "Guardar Alterações 💾";
+        document.getElementById('btn-salvar').style.background = "#FF9800";
+        
+        // Fazer scroll suave até ao formulário
+        document.getElementById('form-titulo').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function salvarExercicio() {
+        const idInput = document.getElementById('edit-id').value;
         const nome = document.getElementById('novo-nome').value.trim();
         const tipo = document.getElementById('novo-tipo').value;
         const base = parseInt(document.getElementById('novo-base').value) || 0;
@@ -297,17 +339,44 @@
             return;
         }
 
-        const novoEx = { id: Date.now(), nome, base, inc, tipo, limite };
-        appDados.exercicios.push(novoEx);
+        if (idInput) {
+            // Modo Edição: Atualiza o exercício existente
+            const id = parseInt(idInput);
+            appDados.exercicios = appDados.exercicios.map(ex => {
+                if (ex.id === id) {
+                    return { id, nome, base, inc, tipo, limite };
+                }
+                return ex;
+            });
+        } else {
+            // Modo Criação: Adiciona um novo
+            const novoEx = { id: Date.now(), nome, base, inc, tipo, limite };
+            appDados.exercicios.push(novoEx);
+        }
+
         guardarDados();
+        resetarFormulario();
         atualizarInterface();
+    }
+
+    function resetarFormulario() {
+        document.getElementById('edit-id').value = '';
         document.getElementById('novo-nome').value = '';
+        document.getElementById('novo-base').value = '30';
+        document.getElementById('novo-inc').value = '5';
+        document.getElementById('novo-limite').value = '60';
+        document.getElementById('form-titulo').innerText = "⚙️ Adicionar Exercício";
+        document.getElementById('btn-salvar').innerText = "Adicionar Exercício +";
+        document.getElementById('btn-salvar').style.background = "#2196F3";
     }
 
     function eliminarExercicio(id) {
         if (confirm('Tens a certeza que queres apagar este exercício?')) {
             appDados.exercicios = appDados.exercicios.filter(ex => ex.id !== id);
             guardarDados();
+            if(document.getElementById('edit-id').value == id) {
+                resetarFormulario();
+            }
             atualizarInterface();
         }
     }
