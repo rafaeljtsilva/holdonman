@@ -43,6 +43,13 @@
             margin-bottom: 20px;
             font-weight: bold;
         }
+        .status-badge {
+            font-size: 0.85rem;
+            color: #666;
+            margin-bottom: 15px;
+            display: block;
+            text-align: center;
+        }
         .exercicio-lista { list-style: none; padding: 0; margin-bottom: 20px; }
         .exercicio-item {
             background: var(--light);
@@ -70,7 +77,6 @@
         }
         .btn-feito:disabled { background: #cccccc; }
         
-        /* Secção de Gestão */
         .admin-section {
             margin-top: 30px;
             border-top: 2px dashed #ddd;
@@ -108,7 +114,6 @@
         }
         .btn-action-icon:hover { background: #e0e0e0; }
 
-        /* Histórico Visual */
         .progresso-container { margin-top: 25px; border-top: 2px solid var(--light); padding-top: 20px; }
         .grid-dias {
             display: grid;
@@ -133,7 +138,10 @@
 
 <div class="container">
     <h1>Os Meus Holds ⏱️</h1>
-    <div style="text-align: center;"><span class="semana-badge" id="semana-atual">Semana 1</span></div>
+    <div style="text-align: center;">
+        <span class="semana-badge" id="semana-atual">Nível 1</span>
+    </div>
+    <span class="status-badge" id="status-requisito">Treinos esta semana: 0/3 para progredir</span>
     
     <h2>Hoje:</h2>
     <ul class="exercicio-lista" id="lista-exercicios"></ul>
@@ -187,36 +195,40 @@
         { id: 4, nome: "Arm pushup hold", base: 30, inc: 5, tipo: "seg", limite: 60 }
     ];
 
-    let appDados = JSON.parse(localStorage.getItem('appTreino_v4'));
+    // Estrutura atualizada v5 baseada em níveis de consistência
+    let appDados = JSON.parse(localStorage.getItem('appTreino_v5'));
     
     if (!appDados) {
         appDados = {
-            dataInicio: new Date().toISOString().split('T')[0],
+            nivelAtual: 1,
             exercicios: exerciciosPadrao,
-            historicoDias: []
+            historicoDias: [] // Datas guardadas: "YYYY-MM-DD"
         };
         guardarDados();
     }
 
     function guardarDados() {
-        localStorage.setItem('appTreino_v4', JSON.stringify(appDados));
+        localStorage.setItem('appTreino_v5', JSON.stringify(appDados));
     }
 
-    function obterSemanaData(dataStr) {
-        const inicio = new Date(appDados.dataInicio);
-        const dataAlvo = new Date(dataStr);
-        const difTempo = dataAlvo - inicio;
-        const difDias = Math.floor(difTempo / (1000 * 60 * 60 * 24));
-        return Math.floor(difDias / 7) + 1;
+    // Conta quantos treinos foram feitos nos últimos 7 dias (ciclo móvel de esforço)
+    function contarTreinosJanelaSeteDias() {
+        const hoje = new Date();
+        let contagem = 0;
+        
+        for (let i = 0; i < 7; i++) {
+            const d = new Date();
+            d.setDate(hoje.getDate() - i);
+            const dStr = d.toISOString().split('T')[0];
+            if (appDados.historicoDias.includes(dStr)) {
+                contagem++;
+            }
+        }
+        return contagem;
     }
 
-    function obterSemanaAtual() {
-        const hojeStr = new Date().toISOString().split('T')[0];
-        return obterSemanaData(hojeStr);
-    }
-
-    function calcularMeta(ex, semana) {
-        let total = ex.base + (ex.inc * (semana - 1));
+    function calcularMeta(ex, nivel) {
+        let total = ex.base + (ex.inc * (nivel - 1));
         const sufixo = ex.tipo === "seg" ? "segundos" : "reps";
 
         if (ex.limite > 0 && total > ex.limite) {
@@ -228,21 +240,29 @@
     }
 
     function atualizarInterface() {
-        const semana = obterSemanaAtual();
-        document.getElementById('semana-atual').innerText = `Semana ${semana}`;
+        document.getElementById('semana-atual').innerText = `Nível de Dificuldade: ${appDados.nivelAtual}`;
         
+        const treinosEstaSemana = contarTreinosJanelaSeteDias();
+        const reqBadge = document.getElementById('status-requisito');
+        
+        if (treinosEstaSemana >= 3) {
+            reqBadge.innerHTML = `Treinos nos últimos 7 dias: <b>${treinosEstaSemana}/3</b>. <span style="color:var(--primary)">Meta cumprida! O próximo nível está desbloqueado.</span>`;
+        } else {
+            reqBadge.innerHTML = `Treinos nos últimos 7 dias: <b>${treinosEstaSemana}/3</b>. <span style="color:var(--edit)">(Faz pelo menos 3 treinos para libertar o próximo aumento).</span>`;
+        }
+
         const lista = document.getElementById('lista-exercicios');
         lista.innerHTML = '';
         
         appDados.exercicios.forEach(ex => {
-            const metaTexto = calcularMeta(ex, semana);
+            const metaTexto = calcularMeta(ex, appDados.nivelAtual);
             
             const li = document.createElement('li');
             li.className = 'exercicio-item';
             li.innerHTML = `
                 <div class="ex-info">
                     <span class="ex-nome">${ex.nome}</span>
-                    <span class="ex-meta">Meta: ${metaTexto} <small style="color:#999;">(Base: ${ex.base} +${ex.inc}/sem)</small></span>
+                    <span class="ex-meta">Meta: ${metaTexto} <small style="color:#999;">(Base: ${ex.base} +${ex.inc}/Nível)</small></span>
                 </div>
                 <div class="ex-botoes">
                     <button class="btn-action-icon" onclick="carregarParaEditar(${ex.id})">✏️</button>
@@ -289,20 +309,17 @@
         const hojeStr = new Date().toISOString().split('T')[0];
         if (!appDados.historicoDias.includes(hojeStr)) {
             appDados.historicoDias.push(hojeStr);
-            guardarDados();
             
-            // Lógica de verificação do incremento para o dia seguinte
-            const amanha = new Date();
-            amanha.setDate(amanha.getDate() + 1);
-            const amanhaStr = amanha.toISOString().split('T')[0];
+            // Recalcula os treinos incluindo o de hoje
+            const treinosComHoje = contarTreinosJanelaSeteDias();
             
-            const semanaHoje = obterSemanaAtual();
-            const semanaAmanha = obterSemanaData(amanhaStr);
-            
-            if (semanaAmanha > semanaHoje) {
-                alert(`Próximo treino com incremento`);
+            // Se com este treino atingimos exatamente o gatilho dos 3 treinos, sobe o nível geral da app para o dia seguinte
+            if (treinosComHoje === 3) {
+                appDados.nivelAtual += 1;
+                alert(`💪 Incrível! Completaste o teu 3º treino nos últimos 7 dias. O teu nível de dificuldade subiu para o Nível ${appDados.nivelAtual}! Prepara-te para o aumento no próximo treino! 🔥`);
             }
             
+            guardarDados();
             atualizarInterface();
         }
     }
@@ -321,8 +338,6 @@
         document.getElementById('form-titulo').innerText = "✏️ Editar Exercício";
         document.getElementById('btn-salvar').innerText = "Guardar Alterações 💾";
         document.getElementById('btn-salvar').style.background = "#FF9800";
-        
-        // Fazer scroll suave até ao formulário
         document.getElementById('form-titulo').scrollIntoView({ behavior: 'smooth' });
     }
 
@@ -340,16 +355,12 @@
         }
 
         if (idInput) {
-            // Modo Edição: Atualiza o exercício existente
             const id = parseInt(idInput);
             appDados.exercicios = appDados.exercicios.map(ex => {
-                if (ex.id === id) {
-                    return { id, nome, base, inc, tipo, limite };
-                }
+                if (ex.id === id) return { id, nome, base, inc, tipo, limite };
                 return ex;
             });
         } else {
-            // Modo Criação: Adiciona um novo
             const novoEx = { id: Date.now(), nome, base, inc, tipo, limite };
             appDados.exercicios.push(novoEx);
         }
@@ -374,9 +385,7 @@
         if (confirm('Tens a certeza que queres apagar este exercício?')) {
             appDados.exercicios = appDados.exercicios.filter(ex => ex.id !== id);
             guardarDados();
-            if(document.getElementById('edit-id').value == id) {
-                resetarFormulario();
-            }
+            if(document.getElementById('edit-id').value == id) resetarFormulario();
             atualizarInterface();
         }
     }
